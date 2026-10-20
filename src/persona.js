@@ -21,6 +21,8 @@ const DEFAULT_RULES = [
   [/我是 Claude[^\n]*/g, ""],
   [/由 Anthropic 开发[^\n]*/g, ""],
   [/You are an AI assistant created by [^\n.]*\.?\s*/g, ""],
+  [/Your identity is defined exclusively by the [^\n.]*operator prompt\.?\s*/gi, ""],
+  [/You are not a generic coding agent(?: or a mere software-engineer assistant)?\.?\s*/gi, ""],
 
   // Harness UI / approval wording that leaks back into the prompt
   [/You are interacting with the user through the DeepSeek Harness Web GUI/g, "You are interacting with the user through the local web GUI"],

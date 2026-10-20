@@ -36,14 +36,18 @@
 | 回退/UI/日志 | `rewind.js`(645)、`web.js`、`hide-console.js`、`table-*.js`、`surface.js` | 界面与运维 |
 | 其余 70 余条 patch | `core.js` `PATCHES/CODE/ENGINE/NEW_TOOL` | 审批/沙箱/文件围栏/兼容，决定“能不能动手”，不决定“肯不肯说” |
 
-## 三、可验证
+## 三、与参考对象的对齐
+
+以 `YuJunZhiXue/dsh-purge` v1.1.71 为基准逐函数对照，本轮修正 4 处不统一（loose 匹配、overlay 步骤、workspace baseline、两条 persona 规则），详见 [ALIGNMENT.md](./ALIGNMENT.md)。
+
+## 四、可验证
 
 ```bash
 npm test          # 19 项：置顶、去重、剥身份、ChatML、overlay、patch 幂等、保活、attach/detach
 npm pack          # 产物仅含 src/ + examples/ + test/ + README + LICENSE
 ```
 
-## 四、源码出处
+## 五、源码出处
 
 - 插件根：`~/.dsh/profiles/web/node_modules/dsh-purge`（v1.1.71，sha256 见 `purge-core-extract/EXTRACT-INDEX.md`）
 - 上游：https://github.com/YuJunZhiXue/dsh-purge

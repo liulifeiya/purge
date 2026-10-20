@@ -4,10 +4,35 @@
 
 import { stripHarnessPersona } from "./persona.js";
 import { stripChatmlTags, wrapChatml } from "./chatml.js";
+import { overlayOfficialIdentity } from "./overlay.js";
 
 export const DEFAULT_SECTION = "dsh-purge";
 export const DEFAULT_ORDER = -100000;
 export const DEFAULT_DROPPED_NAMES = ["harness:identity", "dsh-purge:identity"];
+
+// dsh-agent-instructions 塞 workspace baseline 的两条稳定 marker。
+// 按 name 与 text 双路匹配：宿主改过 section 名时仍能命中。
+const WORKSPACE_TEXT_MARKERS = [
+  "This complete workspace instruction baseline replaces all earlier workspace instruction baselines",
+  "No workspace instructions are currently active",
+];
+const WORKSPACE_NAME_HINTS = [
+  "agent-instructions",
+  "workspace-instruction",
+  "workspace_instruction",
+  "replacement-workspace",
+  "replacement_workspace",
+];
+
+export function isWorkspaceBaselineSection(section) {
+  if (!section) return false;
+  const name = String(section.name || "").toLowerCase();
+  if (WORKSPACE_NAME_HINTS.some((hint) => name.includes(hint))) return true;
+  if (name.includes("workspace") && (name.includes("baseline") || name.includes("instruction"))) return true;
+  const text = typeof section.text === "string" ? section.text : "";
+  if (!text) return false;
+  return WORKSPACE_TEXT_MARKERS.some((marker) => text.includes(marker));
+}
 
 /** A section is `{name, text, order?, interpolate?}` — text may be a string only. */
 export function sanitizeSections(sections) {
@@ -20,6 +45,37 @@ export function sanitizeSections(sections) {
       continue;
     }
     out.push({ ...section, text: typeof section.text === "string" ? section.text : "" });
+  }
+  return out;
+}
+
+const LOOSE_MAX = 4096;
+
+/**
+ * Matchers used to detect an existing copy of the inject. Exact needle first,
+ * then a whitespace-tolerant regex — hosts rewrite indentation and line breaks
+ * between rounds, and an exact-only comparison leaves duplicate copies behind.
+ */
+export function injectMatchers(inject) {
+  const out = [];
+  for (const needle of injectNeedles(inject)) {
+    const segments = needle.length <= LOOSE_MAX
+      ? [needle]
+      : needle.split(/\n{2,}/).map((s) => s.trim()).filter((s) => s.length > 0);
+    for (const seg of segments) {
+      let loose = null;
+      if (seg.length <= LOOSE_MAX) {
+        try {
+          loose = new RegExp(
+            seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"),
+            "g",
+          );
+        } catch {
+          loose = null;
+        }
+      }
+      out.push({ needle: seg, loose });
+    }
   }
   return out;
 }
@@ -46,7 +102,7 @@ export function leadWithInject(sections, inject, opts = {}) {
   const sectionName = opts.sectionName || DEFAULT_SECTION;
   const order = typeof opts.order === "number" ? opts.order : DEFAULT_ORDER;
   const text = String(inject || "").trim();
-  const needles = injectNeedles(text);
+  const matchers = injectMatchers(text);
   const rest = [];
 
   for (const section of Array.isArray(sections) ? sections : []) {
@@ -54,10 +110,18 @@ export function leadWithInject(sections, inject, opts = {}) {
     const body = typeof section.text === "string" ? section.text : "";
     let next = body;
     let hit = false;
-    for (const needle of needles) {
+    for (const { needle, loose } of matchers) {
       if (next.includes(needle)) {
         next = next.split(needle).join("");
         hit = true;
+        continue;
+      }
+      if (loose) {
+        const stripped = next.replace(loose, "");
+        if (stripped !== next) {
+          next = stripped;
+          hit = true;
+        }
       }
     }
     if (!hit) {
@@ -96,6 +160,7 @@ export function rewritePromptAssembly(assembled, opts = {}) {
   for (const section of assembled.sections) {
     if (!section || typeof section !== "object") continue;
     if (dropNames.has(section.name)) continue;
+    if (opts.dropWorkspaceBaseline === true && isWorkspaceBaselineSection(section)) continue;
     const next = { ...section };
     if (stripPersona && typeof next.text === "string") {
       next.text = stripHarnessPersona(next.text);
@@ -103,7 +168,9 @@ export function rewritePromptAssembly(assembled, opts = {}) {
     rest.push(next);
   }
 
-  let sections = leadWithInject(sanitizeSections(rest), inject, { sectionName, order, extra: opts.extra });
+  let sections = overlayOfficialIdentity(
+    leadWithInject(sanitizeSections(rest), inject, { sectionName, order, extra: opts.extra }),
+  );
 
   if (inject) {
     const needle = inject.slice(0, 80);

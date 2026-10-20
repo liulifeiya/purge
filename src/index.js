@@ -13,6 +13,8 @@ export {
   composeSystem,
   injectNeedles,
   sanitizeSections,
+  isWorkspaceBaselineSection,
+  injectMatchers,
   DEFAULT_SECTION,
   DEFAULT_ORDER,
   DEFAULT_DROPPED_NAMES,
