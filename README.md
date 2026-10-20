@@ -11,14 +11,25 @@
 ## 安装
 
 ```bash
-# 直接作为 git 依赖
-npm i github:liulifeiya/purge
+# npm 11+ 默认禁用 git 类型依赖，需显式放行
+npm i --allow-git=all github:liulifeiya/purge
 
-# 或锁版本
-npm i git+https://github.com/liulifeiya/purge.git#v0.1.0
+# 或锁 commit / tag
+npm i --allow-git=all git+https://github.com/liulifeiya/purge.git#v0.1.0
+
+# 长期使用可一次性放行
+npm config set allow-git all
 ```
 
 零运行时依赖，要求 Node ≥ 18（ESM）。
+
+装好后其他项目直接 `import`：
+
+```js
+import { createPurge } from "@liulifeiya/purge-core";
+const purge = createPurge({ inject: operatorPrompt });
+const system = purge.composeSystem(hostSystem);
+```
 
 ## 用法一：任意 LLM 客户端（字符串）
 
