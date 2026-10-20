@@ -1,0 +1,31 @@
+{
+  "name": "purge-core-dsh",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH plugin shell for @liulifeiya/purge-core. Mounts the operator prompt via createPurge().attach() and optionally patches host sources.",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@liulifeiya/purge-core": "github:liulifeiya/purge#ccfeeb0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "install": {
+      "preferred": "local",
+      "git": "https://github.com/liulifeiya/purge.git"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

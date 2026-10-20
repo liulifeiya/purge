@@ -1,0 +1,22 @@
+# purge-core-dsh bundle patch
+#
+# 只挂一个服务：把操作员提示词置顶进 system-prompt 装配链。
+# 不改宿主任何源码；源码补丁由 apply-patches.mjs 单独执行（可选、可回滚）。
+
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    personaPrefix: ""
+    personaSuffix: Your working directory is {{cwd}}.
+
+- insert:
+    - id: purge-core-dsh
+      name: purge-core-dsh
+      inject: [systemPrompt]
+      config:
+        enabled: true
+        stripPersona: true
+        envelope: true
+        heartbeatMs: 400
+        order: -100000
+        sectionName: dsh-purge
