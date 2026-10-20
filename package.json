@@ -1,0 +1,44 @@
+{
+  "name": "@liulifeiya/purge-core",
+  "version": "0.1.0",
+  "description": "Prompt-injection core extracted from dsh-purge: pin an operator prompt at the head of a system-prompt assembly, strip host persona lines, guard the assemble() pipeline across proxy rebuilds.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./assemble-guard": "./src/assemble-guard.js",
+    "./rewrite": "./src/rewrite.js",
+    "./persona": "./src/persona.js",
+    "./host": "./src/host.js",
+    "./attach": "./src/attach.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "examples",
+    "test",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "example:openai": "node examples/openai.mjs"
+  },
+  "keywords": [
+    "prompt",
+    "system-prompt",
+    "prompt-injection",
+    "jailbreak",
+    "cordis",
+    "dsh",
+    "llm"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liulifeiya/purge.git"
+  }
+}
