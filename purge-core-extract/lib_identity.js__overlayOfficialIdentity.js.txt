@@ -1,0 +1,36 @@
+// SOURCE: lib/identity.js:218-252  (dsh-purge v1.1.71)
+export function overlayOfficialIdentity(sections) {
+  const list = Array.isArray(sections) ? sections : [];
+  const out = [];
+  let sawSuffix = false;
+  for (const section of list) {
+    if (!section) continue;
+    const name = String(section.name || "");
+    if (name === "harness:identity" || name === "dsh-purge:identity") continue;
+    if (PERSONA_PREFIX_NAMES.has(name) || PERSONA_LEGACY_NAMES.has(name)) {
+      const raw = String(section.text || "");
+      if (looksLikeOfficialIdentity(raw)) out.push({ ...section, text: "" });
+      else out.push(section);
+      continue;
+    }
+    if (name === "deployment:persona-suffix" || name === "persona-suffix") {
+      sawSuffix = true;
+      const raw = String(section.text || "");
+      if (!raw.trim() || looksLikeOfficialIdentity(raw) || isCwdOnlyText(raw)) {
+        out.push({ ...section, text: CWD_ONLY_SUFFIX });
+      } else {
+        out.push(section);
+      }
+      continue;
+    }
+    out.push(section);
+  }
+  if (!sawSuffix) {
+    out.push({
+      name: "deployment:persona-suffix",
+      text: CWD_ONLY_SUFFIX,
+      order: 10200,
+    });
+  }
+  return out;
+}

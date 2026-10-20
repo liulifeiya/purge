@@ -1,0 +1,88 @@
+// SOURCE: lib/identity.js:901-987  (dsh-purge v1.1.71)
+export function rewritePromptAssembly(assembled, fallbackInject = "", options = {}) {
+  if (!assembled || !Array.isArray(assembled.sections)) return assembled;
+  const opts = normalizeRewriteOptions(fallbackInject, options);
+  // 不原地改写:宿主若复用同一个 assembled 对象,下一轮进来已被我们污染过(多轮 head
+  // dsh-purge / CAPABILITY_SECTION 残留)。返回新对象,传入对象保持原状。
+  const originalSections = assembled.sections;
+  const rest = [];
+  const purge = [];
+  for (const section of originalSections) {
+    if (!section || section.name === "harness:identity") continue;
+    if (section.name === "dsh-purge:identity") continue;
+    if (opts.dropMnemon && isMnemonSection(section.name)) continue;
+    if (opts.dropWorkspaceBaseline && isWorkspaceBaselineSection(section)) continue;
+    const next = { ...section };
+    if (typeof next.text === "string" && !isPluginPromptSection(next.name)) {
+      next.text = stripChatmlTags(stripHarnessPersona(next.text));
+    }
+    if (isPluginPromptSection(next.name)) {
+      purge.push(next);
+    } else {
+      rest.push(next);
+    }
+  }
+
+  const redteam = isRedteamSession(opts.context) || assemblyLooksRedteam(originalSections);
+  const redteamChild = redteam && isRedteamSubagent(opts.context);
+  const rawInject = modePromptText(collectInjectText(purge, opts.fallbackInject), redteam);
+  const injectText = escapeDshInterpolation(
+    peelChatmlEnvelope(adaptInjectForMinimalPreset(withOwnServers(rawInject), opts.context)),
+  );
+  const protocol = opts.capabilityProtocol === false
+    ? ""
+    : capabilityProtocolText({
+      redteam,
+      redteamChild,
+      enabled: true,
+    });
+  // #29: 不要把上一条 system/message 全文钉回 sections。
+  // 默认留下 dsh-purge 段。0.1.5 在 waterfall 之后若 complete:true，只认这段把注入抄进最终提示词；
+  // 提前折进 persona 再删掉本段，重启加载该逻辑后注入会丢。
+  const folded = opts.dropPurgeAfterFold ? foldInjectIntoPersona(rest, injectText) : rest;
+  // 裸的 dsh-purge 段一律不进 extras：leadWithInject 会拿 injectText 重新置顶一份。
+  // 留着它就只能靠字符串全文比对去重，差一个换行就抠不掉、变成两份注入。
+  // 只有 injectText 为空时才保留原段，避免把唯一的正文丢掉。
+  const keepRawPurge = !String(injectText || "").trim();
+  const extras = withoutHardcodedExec(purge.filter((section) => {
+    if (section.name === CAPABILITY_SECTION) return false;
+    if (section.name === "dsh-purge") return keepRawPurge;
+    return true;
+  }));
+  let sections = [...folded, ...extras].map((section) => {
+    if (!section || typeof section.text !== "string") return section;
+    const cut = modePromptText(section.text, redteam);
+    return cut === section.text ? section : { ...section, text: cut };
+  });
+  if (!redteam) sections = withoutRedteamPreset(sections);
+  else {
+    const withOps = attachRedteamOpsOnly(sections);
+    sections = insertRoleSection(insertCardSection(withOps, opts.cardText), opts.roleText);
+  }
+  let outSections = overlayOfficialIdentity(
+    sanitizeAssemblySections(leadWithInject(sections, injectText, protocol)),
+  );
+  if (injectText) {
+    const needle = injectText.slice(0, 80);
+    const has = outSections.some((section) => (
+      typeof section?.text === "string" && needle && section.text.includes(needle)
+    ));
+    if (!has) {
+      outSections = [
+        {
+          name: "dsh-purge",
+          text: injectText,
+          interpolate: false,
+          order: GLOBAL_PROMPT_ORDER,
+        },
+        ...outSections.filter((section) => section && section.name !== "dsh-purge"),
+      ];
+    }
+  }
+  return {
+    ...assembled,
+    sections: outSections,
+    contexts: Array.isArray(assembled.contexts) ? assembled.contexts : [],
+    tools: Array.isArray(assembled.tools) ? assembled.tools : [],
+  };
+}

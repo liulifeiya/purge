@@ -1,0 +1,110 @@
+[
+  {
+    "extract": "lib_core.js__applyPatches.js.txt",
+    "source": "lib/core.js:6991-7082",
+    "bytes": 2677,
+    "sha256": "7af15bfb122905a2"
+  },
+  {
+    "extract": "lib_core.js__applyPatchesAllHosts.js.txt",
+    "source": "lib/core.js:1943-1978",
+    "bytes": 1435,
+    "sha256": "b9e2aa264ba8f480"
+  },
+  {
+    "extract": "lib_core.js__hangOperatorPrompt.js.txt",
+    "source": "lib/core.js:2418-2420",
+    "bytes": 164,
+    "sha256": "bd0adc08472613e1"
+  },
+  {
+    "extract": "lib_core.js__host_inject_concat_blocks.js.txt",
+    "source": "lib/core.js:5580-5700",
+    "bytes": 8141,
+    "sha256": "156cd8edfeb2bbb6"
+  },
+  {
+    "extract": "lib_identity.js__foldInjectIntoPersona.js.txt",
+    "source": "lib/identity.js:728-747",
+    "bytes": 1043,
+    "sha256": "0667b7932f59d8ff"
+  },
+  {
+    "extract": "lib_identity.js__injectMatchers.js.txt",
+    "source": "lib/identity.js:295-317",
+    "bytes": 720,
+    "sha256": "2ec9e1899ad294c7"
+  },
+  {
+    "extract": "lib_identity.js__installAssembleGuard.js.txt",
+    "source": "lib/identity.js:788-899",
+    "bytes": 3682,
+    "sha256": "e1bd352c95ede365"
+  },
+  {
+    "extract": "lib_identity.js__leadWithInject.js.txt",
+    "source": "lib/identity.js:320-370",
+    "bytes": 1396,
+    "sha256": "8203842a164d029a"
+  },
+  {
+    "extract": "lib_identity.js__modePromptText.js.txt",
+    "source": "lib/identity.js:437-440",
+    "bytes": 218,
+    "sha256": "3ee3e9e0f22cb3eb"
+  },
+  {
+    "extract": "lib_identity.js__overlayOfficialIdentity.js.txt",
+    "source": "lib/identity.js:218-252",
+    "bytes": 1181,
+    "sha256": "c8069c1541892a62"
+  },
+  {
+    "extract": "lib_identity.js__rewritePromptAssembly.js.txt",
+    "source": "lib/identity.js:901-987",
+    "bytes": 3612,
+    "sha256": "845c66fd0b3dc477"
+  },
+  {
+    "extract": "lib_identity.js__sanitizeAssemblySections.js.txt",
+    "source": "lib/identity.js:764-779",
+    "bytes": 487,
+    "sha256": "756eb7076ccb3862"
+  },
+  {
+    "extract": "lib_identity.js__stripHarnessPersona.js.txt",
+    "source": "lib/identity.js:98-182",
+    "bytes": 4450,
+    "sha256": "34c65a5272bf1d42"
+  },
+  {
+    "extract": "lib_index.js__apply.js.txt",
+    "source": "lib/index.js:1454-1542",
+    "bytes": 2892,
+    "sha256": "8e8333f9a475e7d5"
+  },
+  {
+    "extract": "lib_index.js__guard_and_prepare_assemble.js.txt",
+    "source": "lib/index.js:690-865",
+    "bytes": 7627,
+    "sha256": "db7cfeab8f929fd1"
+  },
+  {
+    "extract": "lib_index.js__installHungPromptGlobal.js.txt",
+    "source": "lib/index.js:213-245",
+    "bytes": 1836,
+    "sha256": "edd9c206256bbb4e"
+  },
+  {
+    "extract": "lib_index.js__registerPromptSections.js.txt",
+    "source": "lib/index.js:379-424",
+    "bytes": 1583,
+    "sha256": "d2a98254e4bf3a3c"
+  },
+  {
+    "extract": "lib_index.js__rewriteLiveAssembly.js.txt",
+    "source": "lib/index.js:498-556",
+    "bytes": 2499,
+    "sha256": "efd9ff4b30e7ddc0"
+  }
+]

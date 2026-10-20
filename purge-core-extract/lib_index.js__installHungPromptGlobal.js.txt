@@ -1,0 +1,34 @@
+// SOURCE: lib/index.js:213-245  (dsh-purge v1.1.71)
+  // [v10 四重 fallback] 新对话首轮 refreshHungOperator 若因 cache 未就绪 / sync disk 失败 /
+  // resolveInjectText 返空(极端情况)任一环节返空,host 这边读到的 inject 真空 → 模型自称
+  // "我是 Claude"。四重兜底确保任何路径都不会把空串交给 host:
+  //   1) refreshHungOperator — 完整路径(sync disk + resolve + pin)
+  //   2) hungOperatorPrompt   — 上次挂上的内存钉子(进程生命周期)
+  //   3) readPromptInjectFileSync — 直读磁盘 prompt-inject.md,绕过 sync/resolve
+  //   4) defaultOverrideText — 加密槽解包,除非插件安装残缺否则非空
+  const fn = () => {
+    const norm = (s) => peelChatmlEnvelope(String(s || "").replace(/\r\n/g, "\n"));
+    let home = "";
+    try { home = core.findDshHome(); } catch { home = ""; }
+    try {
+      const text = norm(refreshHungOperator(home).text);
+      if (text) { purgeLog("host.hungFn", { tier: "refresh", bytes: text.length }); return text; }
+    } catch (e) { purgeLog("host.hungFn", { tier: "refresh", err: String(e?.message || e) }); }
+    try {
+      const hung = norm(core.hungOperatorPrompt());
+      if (hung) { purgeLog("host.hungFn", { tier: "hung", bytes: hung.length }); return hung; }
+    } catch (e) { purgeLog("host.hungFn", { tier: "hung", err: String(e?.message || e) }); }
+    try {
+      const disk = norm(core.readPromptInjectFileSync(home));
+      if (disk) { purgeLog("host.hungFn", { tier: "disk", bytes: disk.length }); return disk; }
+    } catch (e) { purgeLog("host.hungFn", { tier: "disk", err: String(e?.message || e) }); }
+    try {
+      const sealed = norm(core.defaultOverrideText());
+      if (sealed) { purgeLog("host.hungFn", { tier: "sealed", bytes: sealed.length }); return sealed; }
+    } catch (e) { purgeLog("host.hungFn", { tier: "sealed", err: String(e?.message || e) }); }
+    purgeLog("host.hungFn", { tier: "empty", bytes: 0 });
+    return "";
+  };
+  globalThis.__dshPurgeHungPrompt = fn;
+  return fn;
+}

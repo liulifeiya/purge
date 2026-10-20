@@ -1,0 +1,47 @@
+// SOURCE: lib/index.js:379-424  (dsh-purge v1.1.71)
+export function registerPromptSections(ctx, config) {
+  addPromptSection(ctx, {
+    name: "dsh-purge",
+    order: GLOBAL_PROMPT_ORDER,
+    interpolate: false,
+    text: (context) => {
+      if (!injectAllowedNow(config)) return "";
+      // 标准、极简都注入同一份正文。极简只改工具句，不决定注不注入。
+      return escapeDshInterpolation(
+        peelChatmlEnvelope(adaptInjectForMinimalPreset(readInjectFallback(context), context)),
+      );
+    },
+  });
+
+  if (config.capabilityProtocol !== false) {
+    addPromptSection(ctx, {
+      name: CAPABILITY_SECTION,
+      order: GLOBAL_PROMPT_ORDER + 1,
+      interpolate: false,
+      text: (context) => {
+        if (!injectAllowedNow(config)) return "";
+        const redteam = isRedteamSession(context);
+        return capabilityProtocolText({
+          redteam,
+          redteamChild: redteam && context?.agent?.session?.header?.origin === "subagent",
+          enabled: true,
+        });
+      },
+    });
+  }
+
+  const postPrompt = typeof config.postPrompt === "string" ? config.postPrompt.trim() : "";
+  if (!postPrompt) return;
+  if (!Number.isFinite(config.postPromptOrder) || config.postPromptOrder <= GLOBAL_PROMPT_ORDER) {
+    // 旧版 throw 会把整个 apply 炸掉；postPrompt 只是附加段，降级 skip 不影响核心注入。
+    console.warn(
+      `[dsh-purge] postPromptOrder (${config.postPromptOrder}) 需要是 > ${GLOBAL_PROMPT_ORDER} 的有限数；跳过 postPrompt 段`,
+    );
+    return;
+  }
+  addPromptSection(ctx, {
+    name: "dsh-purge:post",
+    order: config.postPromptOrder,
+    text: () => (injectAllowedNow(config) ? postPrompt : ""),
+  });
+}

@@ -1,0 +1,52 @@
+// SOURCE: lib/identity.js:320-370  (dsh-purge v1.1.71)
+function leadWithInject(sections, inject, protocol = "") {
+  const text = String(inject || "").trim();
+  const proto = String(protocol || "").trim();
+  const matchers = injectMatchers(text);
+  const rest = [];
+  for (const section of sections) {
+    if (!section || section.name === "dsh-purge" || section.name === CAPABILITY_SECTION) continue;
+    const body = typeof section.text === "string" ? section.text : "";
+    let next = body;
+    let hit = false;
+    for (const { needle, loose } of matchers) {
+      if (next.includes(needle)) {
+        next = next.split(needle).join("");
+        hit = true;
+        continue;
+      }
+      if (loose) {
+        const stripped = next.replace(loose, "");
+        if (stripped !== next) {
+          next = stripped;
+          hit = true;
+        }
+      }
+    }
+    if (!hit) {
+      rest.push(section);
+      continue;
+    }
+    next = next.replace(/\n{3,}/g, "\n\n").trim();
+    if (!next) continue;
+    rest.push({ ...section, text: next });
+  }
+  const head = [];
+  if (text) {
+    head.push({
+      name: "dsh-purge",
+      text,
+      order: GLOBAL_PROMPT_ORDER,
+      interpolate: false,
+    });
+  }
+  if (proto) {
+    head.push({
+      name: CAPABILITY_SECTION,
+      text: proto,
+      order: GLOBAL_PROMPT_ORDER + 1,
+      interpolate: false,
+    });
+  }
+  return [...head, ...rest];
+}

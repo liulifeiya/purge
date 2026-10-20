@@ -1,0 +1,177 @@
+// SOURCE: lib/index.js:690-865  (dsh-purge v1.1.71, sha256=f3be69ec781aaae2)
+      try { if (typeof disposer === "function") disposer(); } catch { /* ignore */ }
+      delete ctx.__dshPurgeRewindDerive;
+    };
+  });
+}
+
+function installIdentityOverride(ctx, config = {}) {
+  if (typeof ctx.on !== "function") return;
+  installSubagentRoleCapture(ctx);
+  // installAssembleGuard 幂等:slot.rewrite 已挂的 prompt 对象只刷新 rewriteFn,
+  // 不再 return 新 dispose。原实现每 400ms + 每 pre-step push 一个 noop closure 入 Set,
+  // 2 小时 session 累积上万条。改为:只 track 首次真正挂上的 disposer。
+  const wrapDisposers = new Set();
+  const wrappedPrompts = new WeakSet();
+  const trackDisposer = (d, prompt) => {
+    if (typeof d !== "function") return d;
+    if (prompt) {
+      if (wrappedPrompts.has(prompt)) return d;
+      wrappedPrompts.add(prompt);
+    }
+    wrapDisposers.add(d);
+    return d;
+  };
+  const rewriteFn = (assembled, context) => {
+    // [方案2] installAssembleGuard 走的也是这条路径,同样决策 full/anchor。
+    const decision = shouldInjectAssembly(context);
+    logAssembleDecision("rewriteFn", decision);
+    return rewriteLiveAssembly(config, assembled, context, decision);
+  };
+  // interval 心跳每 400ms 调一次,正常稳态下所有参数不变 — 只在状态翻转或出错时写日志,
+  // 避免每天上百万条 guard.wrap 把 7MB 日志刷爆、把真正事件淹没。
+  let lastGuardSig = "";
+  const wrapAssemble = (caller = "unknown") => {
+    try {
+      const prompt = ctx.systemPrompt;
+      const d = installAssembleGuard(prompt, rewriteFn);
+      const mounted = typeof d === "function";
+      const tracked = trackDisposer(d, prompt);
+      const sig = `${!!prompt}|${mounted}`;
+      if (sig !== lastGuardSig) {
+        purgeLog("guard.wrap", { caller, prompt: !!prompt, mounted });
+        lastGuardSig = sig;
+      }
+      return tracked;
+    } catch (e) {
+      purgeLog("guard.wrap", { caller, err: String(e?.message || e) });
+      lastGuardSig = "";
+      return false;
+    }
+  };
+  if (!ctx.__dshPurgeAssembleHook) {
+    ctx.__dshPurgeAssembleHook = true;
+    // cordis 不同版本的 waterfall 可能是 (assembly, context) 或 (assembly, context, next)：
+    // 旧写法把 `next` 当函数直接取第 3 位，老宿主就拿到 context 当 next，await next() 立刻抛。
+    // disposer 不进 wrapDisposers:ctx.effect cleanup 在 child scope 结束/预设切换都会触发,
+    // 收集进去的话会被误解绑,之后再也挂不回来。cordis 真 dispose 时 listener 自己跟 ctx 释放。
+    try {
+      ctx.on("system-prompt/assemble", async (...args) => {
+        const [assembly, context] = args;
+        const next = args.length >= 3 ? args[args.length - 1] : null;
+        // 入口即记录 — 看请求是否真的到达了我们的 handler;hasNext=false 时说明 cordis
+        // 走的旧签名,下游 waterfall 全靠我们返回的 assembled。
+        let eventsLen = 0;
+        try { eventsLen = readSessionEvents(context?.agent?.session).length; } catch {}
+        purgeLog("assemble.entry", {
+          hasNext: typeof next === "function",
+          sections: Array.isArray(assembly?.sections) ? assembly.sections.length : -1,
+          events: eventsLen,
+        });
+        let assembled = assembly;
+        if (typeof next === "function") {
+          try {
+            assembled = await next();
+          } catch (err) {
+            // 下游 waterfall 任一环节抛就会把整条 assemble 弄死,UI 卡住发不出去。
+            // 吞掉改用上游装配兜底,inject 保底能挂上。
+            try { console.warn("[dsh-purge] system-prompt/assemble waterfall rejected:", err?.message || err); } catch {}
+            purgeLog("assemble.waterfall", { err: String(err?.message || err) });
+            assembled = assembly;
+          }
+        }
+        try {
+          // [v10] 事件处理器开场主动 refresh:新对话首轮 hungCache 可能 null、
+          // installAssembleGuard 可能还没包上 systemPrompt,这里强制把 pinned/磁盘读热,
+          // 保证 readInjectFallback → refreshHungOperator 命中已 warm 的 cache 不走回空值路径。
+          try { refreshHungOperator(core.findDshHome()); } catch { /* resolve 过程异常不阻塞 */ }
+          const decision = shouldInjectAssembly(context);
+          logAssembleDecision("event", decision);
+          return rewriteLiveAssembly(config, assembled, context, decision);
+        } catch (err) {
+          try { console.warn("[dsh-purge] rewriteLiveAssembly failed:", err?.message || err); } catch {}
+          purgeLog("assemble.rewriteFail", { err: String(err?.message || err) });
+          return assembled;
+        }
+      }, { global: true, prepend: true });
+    } catch { /* ctx.on 老版本签名异常,下次 apply 覆盖 */ }
+  }
+  // 切换预设会换掉 assemble。pre-step 瀑布在 assemble 之后才跑，第一次发送包不上。
+  // 宿主在 assemble 之前调用这个函数，用的就是当前模式自己的 systemPrompt。
+  const prepareAssemble = (loopCtx) => {
+    try { refreshHungOperator(core.findDshHome()); } catch { /* 主目录还没有提示词 */ }
+    // loopCtx 可能是宿主的 Proxy，访问 .systemPrompt 自身就会抛（代理层尚未注入服务）。
+    let prompt = null;
+    try { prompt = loopCtx && loopCtx.systemPrompt; } catch { prompt = null; }
+    if (prompt) {
+      try {
+        trackDisposer(installAssembleGuard(prompt, rewriteFn), prompt);
+      } catch { /* 这一层代理包不上时，下面再包插件自己的 */ }
+    }
+    try {
+      const iso = (loopCtx && loopCtx.ctx) || loopCtx;
+      if (iso && iso !== ctx) registerPromptSections(iso, config);
+    } catch { /* 隔离层还没有 systemPrompt */ }
+    wrapAssemble("prepareAssemble");
+    return prompt || null;
+  };
+  globalThis.__dshPurgePrepareAssemble = prepareAssemble;
+  const hungFn = installHungPromptGlobal();
+  // complete:true 会在 waterfall 之后盖掉 sections；包住 assemble 返回值，每轮都补回注入。
+  wrapAssemble("init");
+  // guard 需要在每次 cordis 换 systemPrompt 代理时重挂（session 内切预设、subagent fork、
+  // live-mount）。原本 20 秒后 clearInterval，之后换代理就包不上 → 第二轮 inject 走原生
+  // assemble → 宿主按 token 预算裁剪 → 用户看到"只截取了部分"。installAssembleGuard 幂等
+  // （wrappedPrompts WeakSet + 对象 identity 校验），400ms 持续跑到 ctx dispose 的 CPU 代价可忽略。
+  // 400ms 回滚:2000ms 窗口 → 新对话第一次 assemble 可能跑在钩子挂上之前,inject 塌。
+  // CPU 代价(幂等 wrap)相比"新对话失效"的用户感知,根本不值一提。
+  const timer = setInterval(() => wrapAssemble("interval"), 400);
+  if (typeof timer.unref === "function") timer.unref();
+  // 下面三个 ctx.on 必须加 flag:installIdentityOverride 若被同一 ctx 二次 apply
+  // (dispose 后重 mount / 热重载),listener 叠加会让 inject 跑 N 遍,也让 wrap 挂 N 层。
+  if (!ctx.__dshPurgeSessionHook) {
+    ctx.__dshPurgeSessionHook = true;
+    try {
+      ctx.on("session/created", () => {
+        try { refreshHungOperator(core.findDshHome()); } catch { /* 主目录还没有提示词 */ }
+        wrapAssemble("sessionCreated");
+      });
+    } catch { /* ignore */ }
+  }
+  if (!ctx.__dshPurgePresetHook) {
+    ctx.__dshPurgePresetHook = true;
+    try {
+      ctx.on("agent-preset/selected", () => {
+        try { refreshHungOperator(core.findDshHome()); } catch { /* 主目录还没有提示词 */ }
+        wrapAssemble("presetSelected");
+      }, { global: true });
+    } catch { /* ignore */ }
+  }
+  if (!ctx.__dshPurgePreStepHook) {
+    ctx.__dshPurgePreStepHook = true;
+    try {
+      ctx.on("agent/pre-step", (payload, next) => {
+        wrapAssemble("preStep");
+        return typeof next === "function" ? next() : payload;
+      }, { global: true, prepend: true });
+    } catch { /* ignore */ }
+  }
+  // 热重载/卸载时统一回收：轮询 timer、guard 代理层、暴露给 agent loop 的全局钩子，
+  // 都在同一个 effect 里扫掉；避免下次 apply 再绑一层造成多次写入。
+  try {
+    ctx.effect(() => () => {
+      clearInterval(timer);
+      for (const d of wrapDisposers) {
+        try { d(); } catch { /* ignore */ }
+      }
+      wrapDisposers.clear();
+      // 清 flag,下次 apply 允许重新挂 listener;不然 ctx 复用时沉默无响应。
+      delete ctx.__dshPurgeSessionHook;
+      delete ctx.__dshPurgePresetHook;
+      delete ctx.__dshPurgePreStepHook;
+      // [v10] AssembleHook 也要清。原漏删,ctx 复用时新 apply 看到 flag=true 直接跳过
+      // ctx.on("system-prompt/assemble", ...),cordis event listener 永远不装 → 新对话首轮
+      // 完全依赖 400ms setInterval wrapAssemble 的 guard,时间窗没赶上就 inject 真空。
+      delete ctx.__dshPurgeAssembleHook;
+      // 新对话 / 热重载会先 dispose 再 apply。这里若删全局 hung，
+      // 空窗里立刻发送 hang 读到空串，必须等下一次 apply 才恢复。

@@ -1,0 +1,113 @@
+// SOURCE: lib/identity.js:788-899  (dsh-purge v1.1.71)
+export function installAssembleGuard(prompt, rewriteFn) {
+  if (!prompt || typeof rewriteFn !== "function") return false;
+  let desc;
+  try {
+    desc = Object.getOwnPropertyDescriptor(prompt, "assemble");
+  } catch {
+    desc = undefined;
+  }
+  const bindSlot = (slot) => {
+    slot.rewrite = rewriteFn;
+    // dispose 必须 noop：ctx.effect cleanup 在 cordis 正常生命周期中也会触发
+    // (child ctx scope 结束 / session 边界 / 预设切换),一旦执行链式 dispose,
+    // slot.rewrite 会被回滚到 null → assemble 走原生 → inject 失效 → 用户看到
+    // "任务到一半就苏醒""保存都救不了"的拒答。
+    // 不清 slot.rewrite 是安全的:下次 install 直接覆盖,prompt 对象被 GC 时
+    // 整个 slot 一起回收。
+    return function dispose() { /* noop */ };
+  };
+  if (desc && typeof desc.get === "function" && desc.get[ASSEMBLE_GUARD]) {
+    return bindSlot(desc.get[ASSEMBLE_GUARD]);
+  }
+  if (prompt[ASSEMBLE_GUARD]) {
+    return bindSlot(prompt[ASSEMBLE_GUARD]);
+  }
+  let original;
+  try {
+    original = prompt.assemble;
+  } catch {
+    return false;
+  }
+  if (typeof original !== "function") return false;
+  // cordis 每次读 assemble 都新包一层 createShadowMethod。已包装则立刻返回，
+  // 绝不把这次读到的新代理写进 accessor（#82 / PR #83）。
+  if (original._dshPurgeWrapped) {
+    if (original._dshPurgeSlot) return bindSlot(original._dshPurgeSlot);
+    // 旧包装没挂 slot：没有可解绑的句柄，返回 noop disposer。
+    return function dispose() {};
+  }
+  const slot = { rewrite: rewriteFn };
+  const wrap = (fn) => {
+    if (typeof fn !== "function") return fn;
+    if (fn._dshPurgeWrapped) {
+      if (fn._dshPurgeSlot) fn._dshPurgeSlot.rewrite = slot.rewrite;
+      return fn;
+    }
+    const orig = typeof fn.bind === "function" ? fn.bind(prompt) : fn;
+    const wrapped = async function assembleWithPurge(...args) {
+      let assembled;
+      try {
+        assembled = await orig(...args);
+      } catch (err) {
+        // 原生 assemble 抛 → 不再把整个 waterfall 弄死;用户看到的"任务到一半就苏醒"
+        // "连保存都救不了"就是这里 throw 之后下游 sections.map 崩掉。
+        try { console.warn("[dsh-purge] assembleGuard: inner assemble threw:", err?.message || err); } catch {}
+        return { sections: [], contexts: [], tools: [] };
+      }
+      const rewrite = slot.rewrite;
+      if (typeof rewrite !== "function") return assembled;
+      try {
+        return rewrite(assembled, args[0]);
+      } catch (err) {
+        try { console.warn("[dsh-purge] assembleGuard: rewrite threw:", err?.message || err); } catch {}
+        return assembled;
+      }
+    };
+    wrapped._dshPurgeWrapped = true;
+    wrapped._dshPurgeSlot = slot;
+    return wrapped;
+  };
+  const dispose = function dispose() {
+    // 同 bindSlot:不清 slot.rewrite,避免 ctx.effect cleanup 时 inject 失效。
+    // 下次 install 会直接覆盖 slot.rewrite,prompt 对象被 GC 时 slot 一起回收。
+  };
+  try {
+    let current = wrap(original);
+    const getter = function assembleGuard() {
+      return current;
+    };
+    getter[ASSEMBLE_GUARD] = slot;
+    Object.defineProperty(prompt, "assemble", {
+      configurable: true,
+      enumerable: !desc || desc.enumerable !== false,
+      get: getter,
+      set(next) {
+        current = wrap(next);
+      },
+    });
+    return dispose;
+  } catch {
+    prompt[ASSEMBLE_GUARD] = slot;
+    const inner = wrap(original);
+    // 极端场景：accessor 挂不上。退到 defineProperty + writable:false，
+    // 这样 cordis 下次 `prompt.assemble = next` 会抛，逼它改走 defineProperty，
+    // 届时上层会重新调 installAssembleGuard 挂新 slot。
+    try {
+      Object.defineProperty(prompt, "assemble", {
+        value: inner,
+        writable: false,
+        configurable: true,
+        enumerable: true,
+      });
+      return dispose;
+    } catch {
+      try {
+        prompt.assemble = inner;
+        return dispose;
+      } catch {
+        return false;
+      }
+    }
+  }
+}

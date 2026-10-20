@@ -1,0 +1,5 @@
+// SOURCE: lib/identity.js:437-440  (dsh-purge v1.1.71)
+export function modePromptText(text, redteam) {
+  const raw = redteam ? withoutCtfContract(text) : String(text || "");
+  return stripRegionLecture(raw).trim();
+}

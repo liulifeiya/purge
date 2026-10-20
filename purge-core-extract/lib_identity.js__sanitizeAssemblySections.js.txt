@@ -1,0 +1,17 @@
+// SOURCE: lib/identity.js:764-779  (dsh-purge v1.1.71)
+function sanitizeAssemblySections(sections) {
+  const list = Array.isArray(sections) ? sections : [];
+  const out = [];
+  for (const section of list) {
+    if (!section || typeof section !== "object") continue;
+    if (typeof section.text === "function") {
+      out.push(section);
+      continue;
+    }
+    out.push({
+      ...section,
+      text: typeof section.text === "string" ? section.text : "",
+    });
+  }
+  return out;
+}

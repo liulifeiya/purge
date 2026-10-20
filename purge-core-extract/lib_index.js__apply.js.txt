@@ -1,0 +1,90 @@
+// SOURCE: lib/index.js:1454-1542  (dsh-purge v1.1.71)
+export function apply(ctx, config) {
+  const cfg = { ...DEFAULTS, ...(config || {}) };
+  if (!cfg.enabled) {
+    purgeLog("boot", { enabled: false });
+    return;
+  }
+  purgeLog("boot", {
+    enabled: true,
+    surface: hostctl.currentSurface(),
+    stripMnemon: cfg.stripMnemon !== false,
+    cap: cfg.capabilityProtocol !== false,
+  });
+  core.setHooksDenyConfigValue(cfg.hooksDenyBypass);
+  core.refreshHooksDenySettings();
+  try {
+    const home = core.pinDshHome() || core.findDshHome();
+    purgeLog("home", { home: home || "(none)" });
+    try {
+      if (home) {
+        const flag = path.join(home, ".hung-disabled");
+        if (fs.existsSync(flag)) {
+          fs.unlinkSync(flag);
+          purgeLog("hung-disabled", { removed: flag });
+        }
+      }
+    } catch (e) { purgeLog("hung-disabled", { err: String(e?.message || e) }); }
+    installHungPromptGlobal();
+    // Apply→cleanup→restart 成功后，默认把加密提示词 seed 进 prompt-inject.md。
+    // 用户已经改过的文件不动；只有「没有」或「仍是空文件」时才补写。
+    try {
+      const seed = core.seedPromptInjectAtBoot(home);
+      log(cfg, "seed prompt-inject:", seed?.action || "noop", seed?.reason || "");
+    } catch (e) {
+      console.warn("[dsh-purge] seed prompt-inject failed:", String(e && e.message ? e.message : e));
+    }
+    refreshHungOperator(home);
+  } catch { /* 主目录还没有时，组装会再挂内置默认 */ }
+  // 启动不写宿主包。补丁 / bak / client.js / runtime 只在点「应用」时写一次。
+  const life = watchContextLife(ctx);
+  if (!life.alive) {
+    console.warn("[dsh-purge] skip apply: inactive context");
+    return;
+  }
+  log(cfg, "plugin enabled");
+  core.applyRuntimeEnv();
+  try {
+    const home = core.pinDshHome() || core.findDshHome();
+    refreshHungOperator(home);
+  } catch { /* 主目录还没有时，组装会再挂内置默认 */ }
+
+  const settleTimer = setTimeout(() => {
+    if (!life.alive) {
+      log(cfg, "settle skipped: inactive context");
+      return;
+    }
+    settleInstalledPatches(cfg, ctx, life)
+      .then((r) => log(cfg, "settle:", r))
+      .catch((e) => {
+        if (isInactiveContextError(e)) {
+          log(cfg, "settle skipped: inactive context");
+          return;
+        }
+        console.warn("[dsh-purge] settle error:", String(e));
+      });
+    rules.ensureInitialState(core.findDshHome())
+      .then((r) => log(cfg, "rules init:", JSON.stringify(r)))
+      .catch((e) => console.warn("[dsh-purge] rules init error:", String(e)));
+  }, settleDelayMs(hostctl.currentSurface()));
+  try {
+    ctx.effect(() => () => clearTimeout(settleTimer));
+  } catch (e) {
+    if (isInactiveContextError(e)) {
+      clearTimeout(settleTimer);
+      console.warn("[dsh-purge] skip apply: inactive context");
+      return;
+    }
+    throw e;
+  }
+
+  try {
+    applyHostHooks(ctx, cfg);
+  } catch (e) {
+    if (isInactiveContextError(e)) {
+      console.warn("[dsh-purge] skip apply: inactive context");
+      return;
+    }
+    throw e;
+  }
+}

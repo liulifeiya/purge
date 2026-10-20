@@ -1,0 +1,60 @@
+// SOURCE: lib/index.js:498-556  (dsh-purge v1.1.71)
+function rewriteLiveAssembly(config, assembled, context, decision = { mode: "full", taskKind: "general" }) {
+  const enabled = config.enabled !== false;
+  const redteam = enabled && isRedteamSession(context);
+  const full = enabled ? readInjectFallback(context) : "";
+  const dshHome = enabled ? core.findDshHome() : "";
+  let cwd = "";
+  try { cwd = String(context?.agent?.session?.header?.cwd || "").trim(); } catch { /* ignore */ }
+  if (dshHome && cwd) {
+    try { rules.writeLastCwd(dshHome, cwd); } catch { /* ignore */ }
+  }
+  const policy = enabled && dshHome ? rules.readWorkspacePolicy(dshHome) : "always";
+  // 提示词框为空时才启用勾选的本地 cwd 规则兜底;避免跟 prompt-inject.md 叠加污染。
+  let localInject = "";
+  if (enabled && dshHome && !String(full || "").trim()) {
+    try { localInject = rules.readSelectedCwdInject(dshHome, cwd); } catch { /* ignore */ }
+  }
+  const effectiveFull = String(full || "").trim() ? full : localInject;
+  const inject = effectiveFull;
+  const anchorApplied = false;
+  const hasInject = Boolean(String(inject || "").trim());
+  let dropWorkspaceBaseline = false;
+  if (enabled) {
+    if (policy === "strict") dropWorkspaceBaseline = true;
+    else if (policy === "fallback") dropWorkspaceBaseline = hasInject;
+    else dropWorkspaceBaseline = false;
+  }
+  const roleText = redteam ? resolveSubagentRoleText(context) : "";
+  const rewritten = rewritePromptAssembly(assembled, {
+    fallbackInject: inject,
+    dropMnemon: config.stripMnemon !== false,
+    dropPurgeAfterFold: false,
+    capabilityProtocol: config.capabilityProtocol !== false,
+    context,
+    roleText,
+    dropWorkspaceBaseline,
+  });
+  const closerFollow = closerFollowBytes(rewritten?.sections);
+  purgeLog("assemble.rewrite", {
+    enabled,
+    redteam,
+    mode: decision?.mode || "full",
+    task: decision?.taskKind || "general",
+    last: decision?.lastRole || "unknown",
+    fullBytes: full.length,
+    localBytes: localInject.length,
+    injectBytes: inject.length,
+    anchorApplied,
+    roleBytes: roleText.length,
+    cap: config.capabilityProtocol !== false,
+    strip: config.stripMnemon !== false,
+    policy,
+    dropWorkspaceBaseline,
+    injectHead: Array.isArray(rewritten?.sections) && rewritten.sections[0]?.name === "dsh-purge",
+    chatml: Array.isArray(rewritten?.sections) && /<project_instructions>|<\|im_start\|>/i.test(String(rewritten.sections[0]?.text || "")),
+    afterCloser: closerFollow,
+    cwd,
+  });
+  return rewritten;
+}

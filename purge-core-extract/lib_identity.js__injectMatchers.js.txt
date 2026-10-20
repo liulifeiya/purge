@@ -1,0 +1,24 @@
+// SOURCE: lib/identity.js:295-317  (dsh-purge v1.1.71)
+function injectMatchers(inject) {
+  const matchers = [];
+  for (const needle of injectNeedles(inject)) {
+    const segments = needle.length <= INJECT_LOOSE_REGEXP_MAX
+      ? [needle]
+      : needle.split(/\n{2,}/).map((s) => s.trim()).filter((s) => s.length > 0);
+    for (const seg of segments) {
+      let loose = null;
+      if (seg.length <= INJECT_LOOSE_REGEXP_MAX) {
+        try {
+          loose = new RegExp(
+            seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"),
+            "g",
+          );
+        } catch {
+          loose = null;
+        }
+      }
+      matchers.push({ needle: seg, loose });
+    }
+  }
+  return matchers;
+}

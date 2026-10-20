@@ -1,0 +1,93 @@
+// SOURCE: lib/core.js:6991-7082  (dsh-purge v1.1.71)
+export async function applyPatches(aiBase, patches = ALL_PATCHES, options = {}) {
+  restoreMissingOriginalsFromBak(aiBase);
+  refreshStaleBaksForUpgrade(aiBase);
+  const files = targetFiles(aiBase);
+  const report = [];
+  const preserveClientBundles = options.preserveClientBundles === true;
+  await repairPluginCordisYaml();
+  for (const p of patches) {
+    if (!patchAppliesHere(p)) {
+      report.push({
+        patch_id: p.id,
+        name: p.name,
+        status: "na",
+        path: "",
+        applied: 0,
+        already: 0,
+        missing: 0,
+      });
+      continue;
+    }
+    const keys = fileKeysOf(p);
+    const paths = [];
+    let applied = 0;
+    let already = 0;
+    let missing = 0;
+    let notFound = 0;
+    let lastError = null;
+    for (const key of keys) {
+      const fps = pathsOf(files, key);
+      if (fps.length === 0) {
+        missing += 1;
+        continue;
+      }
+      for (const fp of fps) {
+        paths.push(fp);
+        let text;
+        try {
+          text = await loadText(fp);
+        } catch {
+          lastError = "read_error";
+          continue;
+        }
+        // 启动自愈才跳过。点应用/重启若也跳过，client.js 上的补丁会一直 pending，重启被取消。
+        if (preserveClientBundles && isWatchedClientBundle(fp)) {
+          if (filePatchSettled(text, p, fp)) already += 1;
+          else if (patchHasRemainingWork(text, p, fp) || p.strictFiles) notFound += 1;
+          continue;
+        }
+        const appliedText = applyReplacementsToText(text, p, fp);
+        let textOut = appliedText.text;
+        let changed = appliedText.changed;
+        if (isYamlPath(fp)) {
+          const cleaned = sanitizeYamlPersonaScalars(textOut);
+          if (cleaned !== textOut) {
+            textOut = cleaned;
+            changed = true;
+          }
+        }
+        if (changed) {
+          try {
+            const wrote = await saveText(fp, textOut);
+            if (wrote) applied += 1;
+            else already += 1;
+          } catch (e) {
+            lastError = `write_error:${e}`;
+          }
+          continue;
+        }
+        if (filePatchSettled(text, p, fp)) {
+          already += 1;
+        } else if (patchHasRemainingWork(text, p, fp) || p.strictFiles) {
+          notFound += 1;
+        }
+      }
+    }
+    const status = rollupPatchStatus({
+      applied, already, missing, notFound, lastError, keyCount: keys.length,
+      layoutSoft: isLayoutSoftPatch(p),
+      strictFiles: !!p.strictFiles,
+    });
+    report.push({
+      patch_id: p.id,
+      name: p.name,
+      status,
+      path: paths[0] || files[keys[0]],
+      applied,
+      already,
+      missing,
+    });
+  }
+  return report;
+}

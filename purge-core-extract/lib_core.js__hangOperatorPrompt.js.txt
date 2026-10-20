@@ -1,0 +1,4 @@
+// SOURCE: lib/core.js:2418-2420  (dsh-purge v1.1.71)
+export function hangOperatorPrompt(text) {
+  hungOperatorPromptText = typeof text === "string" ? text : "";
+}

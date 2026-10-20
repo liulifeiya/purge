@@ -1,0 +1,37 @@
+// SOURCE: lib/core.js:1943-1978  (dsh-purge v1.1.71)
+export async function applyPatchesAllHosts(patches = ALL_PATCHES, options = {}) {
+  const settings = options.hooksDeny?.settings || getHooksDenySettings();
+  const pick = options.hooksDeny?.selectPatches || hooksDeny.selectPatches;
+  const selected = pick(patches, settings);
+  const hookDenyRestoreFailed = [];
+  const hookDenyRestoreChanged = [];
+  const hosts = [];
+  const seen = new Set();
+  for (const raw of enumeratePatchAiBases({ discover: options.forApply === true || options.discover === true })) {
+    const aiBase = await resolveAiBaseForApply(raw, options);
+    if (!aiBase) continue;
+    const key = path.normalize(aiBase).replace(/\\/g, "/").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await backupAll(aiBase);
+    if (settings.hooksDenyBypass === false) {
+      const restored = await restoreHookDenyForBases([aiBase]);
+      hookDenyRestoreFailed.push(...restored.failed);
+      hookDenyRestoreChanged.push(...restored.changed);
+    }
+    const report = await applyPatches(aiBase, selected, options);
+    hosts.push({
+      aiBase,
+      report,
+      summary: summarizeApplyReport(report),
+      hostWritten: hostCleanMarkersPresent(aiBase),
+      flash: silenceCmdFlash(aiBase),
+    });
+  }
+  return {
+    hosts,
+    report: mergeApplyReports(hosts.map((h) => h.report)),
+    hookDenyRestoreFailed,
+    hookDenyRestoreChanged,
+  };
+}

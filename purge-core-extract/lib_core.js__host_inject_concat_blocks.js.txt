@@ -1,0 +1,122 @@
+// SOURCE: lib/core.js:5580-5700  (dsh-purge v1.1.71, sha256=1bd1e83a45be6835)
+          "\t\twhile (true) {\n" +
+          "\t\t\tconst { request, preparedCall } = await this.buildRequest(turn, step, assembly.tools, system, this.session.deriveMessages(), signal);",
+        replace:
+          "\t\tlet system = renderPrompt(assembly);\n" +
+          "\t\tconst dshPurgeHungFn = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? globalThis.__dshPurgeHungPrompt : null;\n" +
+          "\t\tconst dshPurgeHung = dshPurgeHungFn ? String(dshPurgeHungFn() || \"\").trim() : \"\";\n" +
+          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
+          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(system || \"\").includes(dshPurgeTail))) {\n" +
+          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
+          "\t\t}\n" +
+          "\t\twhile (true) {\n" +
+          "\t\t\tconst { request, preparedCall } = await this.buildRequest(turn, step, assembly.tools, system, this.session.deriveMessages(), signal);",
+      },
+      {
+        pattern:
+          "\t\tconst dshPurgePrepare = globalThis.__dshPurgePrepareAssemble;\n" +
+          "\t\tif (typeof dshPurgePrepare === \"function\") {\n" +
+          "\t\t\ttry { dshPurgePrepare(this.loopCtx); } catch { /* [dsh-purge] prepare assemble before this step */ }\n" +
+          "\t\t}\n" +
+          "\t\tconst assembly = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal));",
+        replace:
+          "\t\tconst dshPurgePrepare = globalThis.__dshPurgePrepareAssemble;\n" +
+          "\t\tlet dshPurgePrompt = null;\n" +
+          "\t\tif (typeof dshPurgePrepare === \"function\") {\n" +
+          "\t\t\ttry { dshPurgePrompt = dshPurgePrepare(this.loopCtx); } catch { /* [dsh-purge] prepare assemble before this step */ }\n" +
+          "\t\t}\n" +
+          "\t\tconst dshPurgeAssemble = dshPurgePrompt && typeof dshPurgePrompt.assemble === \"function\" ? dshPurgePrompt : this.loopCtx.systemPrompt;\n" +
+          "\t\tconst assembly = await dshPurgeAssemble.assemble(assembleContextFor(this, signal));",
+      },
+      {
+        pattern:
+          "\t\tconst { assembly } = decision;\n" +
+          "\t\tconst renderedPrompt = renderPrompt(assembly);",
+        replace:
+          "\t\tconst { assembly } = decision;\n" +
+          "\t\tlet renderedPrompt = renderPrompt(assembly);\n" +
+          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
+          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
+          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(renderedPrompt || \"\").includes(dshPurgeTail))) {\n" +
+          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
+          "\t\t}",
+      },
+      {
+        pattern:
+          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? globalThis.__dshPurgeHungPrompt() : \"\";\n" +
+          "\t\tconst dshPurgeNeedle = String(dshPurgeHung || \"\").trim().slice(0, 96);\n" +
+          "\t\tif (dshPurgeNeedle && !String(renderedPrompt || \"\").includes(dshPurgeNeedle)) {\n" +
+          "\t\t\trenderedPrompt = String(dshPurgeHung).trim() + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject every step\n" +
+          "\t\t}",
+        replace:
+          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
+          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
+          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(renderedPrompt || \"\").includes(dshPurgeTail))) {\n" +
+          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
+          "\t\t}",
+      },
+      {
+        pattern:
+          "\t\t\trenderedPrompt = (renderedPrompt ? renderedPrompt + \"\\n\\n\" : \"\") + dshPurgeHung; // [dsh-purge] hang full prompt-inject after closer\n",
+        replace:
+          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject at head\n",
+      },
+      {
+        pattern:
+          "\t\t\tsystem = (system ? system + \"\\n\\n\" : \"\") + dshPurgeHung; // [dsh-purge] hang full prompt-inject after closer\n",
+        replace:
+          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge] hang full prompt-inject at head\n",
+      },
+      {
+        pattern:
+          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
+          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
+          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(renderedPrompt || \"\").includes(dshPurgeTail))) {\n" +
+          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
+          "\t\t}",
+        replace:
+          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
+          "\t\tconst dshPurgeNorm = String(renderedPrompt || \"\").replace(/\\r\\n/g, \"\\n\");\n" +
+          "\t\tconst dshPurgeHungNorm = dshPurgeHung.replace(/\\r\\n/g, \"\\n\");\n" +
+          "\t\tconst dshPurgeTail = dshPurgeHungNorm.slice(-96);\n" +
+          "\t\tconst dshPurgeHead = dshPurgeHungNorm.slice(0, 80);\n" +
+          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
+          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
+          "\t\t}",
+      },
+      {
+        pattern:
+          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
+          "\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n" +
+          "\t\tif (dshPurgeHung && (!dshPurgeTail || !String(system || \"\").includes(dshPurgeTail))) {\n" +
+          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge] hang full prompt-inject at head\n" +
+          "\t\t}",
+        replace:
+          "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n" +
+          "\t\tconst dshPurgeNorm = String(system || \"\").replace(/\\r\\n/g, \"\\n\");\n" +
+          "\t\tconst dshPurgeHungNorm = dshPurgeHung.replace(/\\r\\n/g, \"\\n\");\n" +
+          "\t\tconst dshPurgeTail = dshPurgeHungNorm.slice(-96);\n" +
+          "\t\tconst dshPurgeHead = dshPurgeHungNorm.slice(0, 80);\n" +
+          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
+          "\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
+          "\t\t}",
+      },
+    ],
+    markers: ["[dsh-purge-87] hang needle uses LF"],
+  },
+  {
+    id: 88,
+    name: "HUNG_PROMPT_STRICT_NEEDLE",
+    layer: "代码",
+    layer_en: "Code",
+    desc: "ChatML 头和正文尾都在才算挂住，只剩头或只剩尾都重新置顶",
+    file: ["agent-loop"],
+    optional: true,
+    skipIfMarked: true,
+    replacements: [
+      {
+        pattern:
+          "\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail)) && !(dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n" +
+          "\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge-87] hang needle uses LF\n" +
+          "\t\t}",
+        replace:

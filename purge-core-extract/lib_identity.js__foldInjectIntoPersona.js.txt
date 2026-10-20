@@ -1,0 +1,21 @@
+// SOURCE: lib/identity.js:728-747  (dsh-purge v1.1.71)
+function foldInjectIntoPersona(sections, injectText) {
+  const inject = typeof injectText === "string" ? injectText : "";
+  const names = sections.map((s) => String(s?.name || ""));
+  const hasPrefix = names.some((n) => PERSONA_PREFIX_NAMES.has(n));
+  let folded = false;
+  const out = sections.map((section) => {
+    const name = String(section?.name || "");
+    if (!isPersonaFoldTarget(name, hasPrefix)) return section;
+    folded = true;
+    const prior = stripIdentityPrefix(String(section.text || ""));
+    if (!inject) return { ...section, text: prior };
+    if (prior.includes(inject)) return { ...section, text: prior };
+    return { ...section, text: prior ? `${inject}\n\n${prior}` : inject };
+  });
+  if (folded) return out;
+  if (!inject) return out;
+  const orders = sections.map((s) => s?.order).filter((n) => Number.isFinite(n));
+  const order = orders.length ? Math.min(0, ...orders) : 0;
+  return [{ name: "deployment:persona-prefix", text: inject, order }, ...out];
+}
