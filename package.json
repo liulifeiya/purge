@@ -11,7 +11,10 @@
     "./persona": "./src/persona.js",
     "./host": "./src/host.js",
     "./attach": "./src/attach.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./chatml": "./src/chatml.js",
+    "./overlay": "./src/overlay.js",
+    "./host-patches": "./src/host-patches.js"
   },
   "files": [
     "src",

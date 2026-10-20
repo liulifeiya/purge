@@ -16,6 +16,7 @@ export function createPurge(options = {}) {
     sectionName: options.sectionName || DEFAULT_SECTION,
     order: typeof options.order === "number" ? options.order : DEFAULT_ORDER,
     stripPersona: options.stripPersona !== false,
+    envelope: options.envelope === true,
     dropNames: options.dropNames || undefined,
   };
 
@@ -46,7 +47,7 @@ export function createPurge(options = {}) {
     },
     /** Plain-string path: use for OpenAI/Anthropic/self-hosted requests. */
     composeSystem(system) {
-      return composeSystem(system, state.text, { stripPersona: state.stripPersona });
+      return composeSystem(system, state.text, { stripPersona: state.stripPersona, envelope: state.envelope });
     },
     /** Assembly path: returns a new assembly with the inject pinned first. */
     composeSections(assembled) {
@@ -136,6 +137,7 @@ export function createPurge(options = {}) {
         sectionName: state.sectionName,
         order: state.order,
         stripPersona: state.stripPersona,
+        envelope: state.envelope,
         handlers: detachFns.length,
       };
     },

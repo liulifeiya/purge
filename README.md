@@ -26,8 +26,14 @@ npm config set allow-git all
 装好后其他项目直接 `import`：
 
 ```js
-import { createPurge } from "@liulifeiya/purge-core";
-const purge = createPurge({ inject: operatorPrompt });
+import { createPurge, DEFAULT_INJECT } from "@liulifeiya/purge-core";
+
+// 用内置载荷（dsh-purge v1.1.71 原文，20,969 字符）
+const purge = createPurge({ inject: DEFAULT_INJECT });
+
+// 或换成自己的
+// const purge = createPurge({ inject: fs.readFileSync("./operator.md", "utf8") });
+
 const system = purge.composeSystem(hostSystem);
 ```
 
@@ -101,6 +107,11 @@ export function apply(ctx, config) {
 | `hangPrompt` / `hungPrompt` | 进程内钉子 |
 | `installHostGlobal(name)` | 挂 `globalThis[name]` 供宿主代码读取 |
 | `hostSnippet({target})` | 生成可粘进宿主源码的拼接片段（头尾双 needle 判定） |
+| `normalizeChatmlLayout` / `wrapChatml` / `stripChatmlTags` | ChatML 信封：拆行、补闭合、从宿主段剥离残留标签 |
+| `escapeInterpolation(text, allowed)` | 把宿主会误插值的 `{{x}}` 转成 `{ {x}}`，避免整段被丢 |
+| `overlayOfficialIdentity(sections)` | 清空只含厂商身份的 prefix 段，保证 cwd-only suffix 存在 |
+| `HOST_PATCHES` / `applyHostPatch` / `applyHostPatches` | 6 条宿主防覆盖 patch 原文（#55/#66/#72/#74/#87/#88）+ 幂等执行器 |
+| `DEFAULT_INJECT` | 内置载荷原文 |
 
 ## 设计要点（踩过的坑）
 
@@ -115,6 +126,12 @@ export function apply(ctx, config) {
 npm test
 # 11 项：置顶、去重、剥身份、幂等包装、宿主换实现、异常兜底、attach/detach
 ```
+
+## 完整性
+
+破甲主体 6 层（载荷 / 格式 / 置顶 / 身份 / 保活 / 宿主）全部在包内；红队技能包、预设、桌面端、更新卸载、回退 UI 等**未包含**。
+
+逐层对照与原实现行号见 [COMPLETENESS.md](./COMPLETENESS.md)。
 
 ## 许可
 

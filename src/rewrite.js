@@ -3,6 +3,7 @@
 // and generalized: no filesystem, no host globals, caller supplies the inject text.
 
 import { stripHarnessPersona } from "./persona.js";
+import { stripChatmlTags, wrapChatml } from "./chatml.js";
 
 export const DEFAULT_SECTION = "dsh-purge";
 export const DEFAULT_ORDER = -100000;
@@ -127,9 +128,10 @@ export function rewritePromptAssembly(assembled, opts = {}) {
  * @param {{stripPersona?: boolean, dedupe?: boolean}} [opts]
  */
 export function composeSystem(system, inject, opts = {}) {
-  const text = String(inject || "").trim();
   const base = String(system || "");
-  const cleaned = opts.stripPersona === false ? base : stripHarnessPersona(base);
+  const cleaned = stripChatmlTags(opts.stripPersona === false ? base : stripHarnessPersona(base));
+  const raw = String(inject || "").trim();
+  const text = raw && opts.envelope === true ? wrapChatml(raw) : raw;
   if (!text) return cleaned;
   if (opts.dedupe !== false && cleaned.includes(text.slice(-96))) return cleaned;
   return cleaned ? `${text}\n\n${cleaned}` : text;
