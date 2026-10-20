@@ -66,6 +66,22 @@ cp ~/dsh-purge-lite/lite-prompt-inject.md ~/.dsh/prompt-inject.md
 
 而 `lib/core.js` 的 `looksLikePluginDefault()` 用三个标记判断「这是插件默认稿」：`<|im_start|>system:`、`<project_instructions>`、**`Little Code Sauce`**。裁剪稿不含第三个标记 → 被判为「用户自己写的稿」→ 受 `isKeepableUserOverride` 保护，不会被加密默认冲掉。所以覆盖一次即可稳定生效。
 
+## 文档清理
+
+`README.md` / `README.zh-CN.md` 里宣传已移除功能的内容会被一并处理，避免装上后按文档找不到入口：
+
+| 处理 | 内容 |
+|---|---|
+| 整节删除 | `## 界面预览` / `## Preview`（截图 + 侧栏说明表） |
+| 段落重写 | `## 目录结构` / `## Layout`，改为 lite 实际文件构成 |
+| 表格行删除 | 侧栏、演练台、Skill、清洗 相关行；整表只剩表头时整表删除 |
+| 流程图删除 | 含 `/skills` 的 mermaid 块（含标题行） |
+| 指引改写 | 「点会话标题旁的 dsh-purge → 清洗 → 应用」→ 「执行 `/purge apply`」 |
+| 命令删除 | `/skills list \| import ...`、`node --check lib/skills.js` |
+| 顶部声明 | 插入 lite 版差异说明（移除项 + 安装方式） |
+
+清理后 `grep "演练台|侧栏|Skill"` 只剩「已移除」声明与目录结构说明，不再有功能指引。
+
 ## 校验
 
 脚本每次运行会做：

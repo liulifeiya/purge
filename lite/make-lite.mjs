@@ -253,6 +253,154 @@ pkg.lite = {
 fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 report.push(`package.json：移除 6 个 ./redteam* exports 与 presets/skills/docs 发布项${keepClient ? "" : "，并去掉 dsh.client 侧栏"}`);
 
+
+// 4.2) 文档清理：让 README 不再宣传已移除的侧栏 / 演练台 / Skill
+function cleanDocs(text, zh) {
+  let lines = String(text || "").split("\n");
+  const KW = zh ? /演练台|侧栏|Skill|skills|client\.js/ : /Drill|dock|Skill|skills|client\.js/i;
+
+  // a) 整节删除：界面预览 / Preview
+  const dropHeading = zh ? "## 界面预览" : "## Preview";
+  const stopHeading = zh ? "## 目录结构" : "## Layout";
+  const a = lines.findIndex((l) => l.trim() === dropHeading);
+  if (a >= 0) {
+    const b = lines.findIndex((l, i) => i > a && l.trim().startsWith(stopHeading));
+    if (b > a) lines.splice(a, b - a);
+  }
+
+  // b) 表格：删命中行；只剩表头时整表删除
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].startsWith("|")) {
+      out.push(lines[i]);
+      continue;
+    }
+    let j = i;
+    while (j < lines.length && lines[j].startsWith("|")) j += 1;
+    const block = lines.slice(i, j);
+    const kept = block.filter((l) => !KW.test(l));
+    const body = kept.filter((l) => !/^\|[\s:|-]+\|$/.test(l));
+    if (body.length > 1) out.push(...kept);
+    i = j - 1;
+  }
+  lines = out;
+
+  // c) 目录结构 / Layout 段重写
+  const layoutHead = zh ? "## 目录结构" : "## Layout";
+  const layoutNext = zh ? "## 使用" : "## Usage";
+  const c = lines.findIndex((l) => l.trim().startsWith(layoutHead));
+  if (c >= 0) {
+    const d = lines.findIndex((l, i) => i > c && l.trim().startsWith(layoutNext));
+    if (d > c) {
+      const body = zh
+        ? [
+            layoutHead,
+            "",
+            "`bin/` 是命令行，`lib/` 是补丁与注入实现，`cordis.patch.yml` 是 bundle 配置。",
+            "",
+            "lite 版已移除 `skills/redteam/`（技能包）、`presets/redteam/`（红队预设）、`lib/redteam/`（演练台）、`client.js`（侧栏）。",
+            "",
+            "运行时文件在 `$DSH_HOME`：`prompt-inject.md`、`rules/`、`net-scope-allow.txt`。未设 `DSH_HOME` 时，优先用 dsh 安装目录旁边的 `.dsh`，再退回 `~/.dsh`。",
+            "",
+          ]
+        : [
+            layoutHead,
+            "",
+            "`bin/` is the CLI, `lib/` is patches and the injection implementation, `cordis.patch.yml` is the bundle config.",
+            "",
+            "The lite build drops `skills/redteam/` (bundled skills), `presets/redteam/` (red-team preset), `lib/redteam/` (drill console), and `client.js` (dock).",
+            "",
+            "Runtime files live under `$DSH_HOME`: `prompt-inject.md`, `rules/`, `net-scope-allow.txt`. If `DSH_HOME` is unset, the launcher-adjacent `.dsh` wins over `~/.dsh`.",
+            "",
+          ];
+      lines.splice(c, d - c, ...body);
+    }
+  }
+
+  // d) 删单行命令与校验项
+  const lineDrop = zh
+    ? [/^\s*\/skills\b/, /lib\/skills\.js/, /^\s*\|?\s*Skill\s*\|/]
+    : [/^\s*\/skills\b/, /lib\/skills\.js/, /^\s*\|?\s*Skills?\s*\|/i];
+  lines = lines.filter((l) => !lineDrop.some((re) => re.test(l)));
+  lines = lines.filter((l) => !/^\|\s*\*\*(清洗|Clean)\*\*\s*\|/.test(l));
+
+  // e) 含 skills 的 mermaid 代码块整块删除（按块扫描，避免留下孤儿节点）
+  const flow = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].trimStart().startsWith("```mermaid")) {
+      flow.push(lines[i]);
+      continue;
+    }
+    let j = i + 1;
+    while (j < lines.length && !lines[j].trimStart().startsWith("```")) j += 1;
+    const block = lines.slice(i, j + 1);
+    if (block.some((l) => /skills|\/skills|SKILL\.md/i.test(l))) {
+      i = j;
+      continue;
+    }
+    flow.push(...block);
+    i = j;
+  }
+  lines = flow;
+
+  // e2) 说明文字里对侧栏的引用改成页面
+  lines = lines.map((l) =>
+    l
+      .replace(/若侧栏里还没有它/g, "若页面里还没有它")
+      .replace(/If the dock does not show it yet/g, "If the panel does not show it yet")
+      .replace(/^1\. Click \*\*dsh-purge\*\* beside the session title and stay on \*\*Clean\*\*\.$/g, "1. Run `/purge status`.")
+      .replace(/^Skill 不进注入段：$/g, "")
+      .replace(/^Skills stay out of the inject section:$/g, ""),
+  );
+
+  // e3) 侧栏已不存在：把"点按钮"的指引统一换成 CLI
+  const REPL = zh
+    ? [
+        [/点会话标题旁的 \*\*dsh-purge\*\* → \*\*清洗\*\* → \*\*应用\*\*/g, "执行 `/purge apply`（或 `dsh-purge --apply`）"],
+        [/点会话标题旁的 \*\*dsh-purge\*\*，在 \*\*清洗\*\* 页点 \*\*「应用」\*\*/g, "执行 `/purge apply`"],
+        [/会话标题旁有 \*\*dsh-purge\*\*，点开后在「清洗」里能点「应用」/g, "`/purge status` 能列出补丁，`/purge apply` 能应用"],
+        [/按钮会出现在会话标题旁，只在这个宿主点「应用」（或 `\/purge apply`）/g, "在该宿主执行 `/purge apply`"],
+        [/会话标题旁的 \*\*dsh-purge\*\* →「清洗」→「卸载」/g, "执行 `/purge uninstall`"],
+        [/点会话标题旁的 \*\*dsh-purge\*\*，停在 \*\*清洗\*\*/g, "执行 `/purge status`"],
+        [/在 \*\*dsh-purge\*\* 的「清洗」里点「应用」才写入/g, "执行 `/purge apply` 才写入"],
+        [/\*\*完全退出宿主 → 清洗里应用 → 自动重启 → 新开一轮对话\*\*/g, "**完全退出宿主 → `/purge apply` → 自动重启 → 新开一轮对话**"],
+        [/各自点会话标题旁的 \*\*dsh-purge\*\*，在「清洗」里点「应用」。然后停止。/g, "各自执行 `/purge apply`。然后停止。"],
+      ]
+    : [
+        [/Click \*\*dsh-purge\*\* beside the session title → \*\*Clean\*\* → \*\*Apply\*\*/g, "Run `/purge apply` (or `dsh-purge --apply`)"],
+        [/On \*\*that host\*\*, click \*\*dsh-purge\*\* beside the session title, then \*\*Apply\*\* on the \*\*Clean\*\* page\./g, "On **that host**, run `/purge apply`."],
+        [/\*\*dsh-purge\*\* sits beside the session title, with \*\*Apply\*\* on its Clean page\./g, "`/purge status` lists patches and `/purge apply` applies them."],
+        [/The card appears beside the session title; click \*\*Apply\*\* \(or `\/purge apply`\) on that host only\./g, "Run `/purge apply` on that host only."],
+        [/\*\*dsh-purge\*\* beside the session title → \*\*Clean\*\* → \*\*Uninstall\*\*/g, "Run `/purge uninstall`"],
+        [/open \*\*dsh-purge\*\* beside the session title and \*\*Apply\*\* on \*\*Clean\*\*/g, "run `/purge apply`"],
+        [/\*\*Apply\*\* on the \*\*Clean\*\* page of \*\*dsh-purge\*\* is what writes the changes\./g, "`/purge apply` is what writes the changes."],
+      ];
+  lines = lines.map((l) => {
+    let out2 = l;
+    for (const [re, to] of REPL) out2 = out2.replace(re, to);
+    return out2;
+  });
+
+  // f) 顶部 lite 声明
+  const notice = zh
+    ? [
+        "> **lite 版**：本副本由 `lite/make-lite.mjs` 从 dsh-purge v1.1.71 裁剪生成。",
+        "> 已移除：`skills/redteam/`（23 个技能包）、`presets/redteam/`（红队预设与角色）、`lib/redteam/`（演练台）、",
+        "> `lib/skills.js`（技能导入）、`client.js`（侧栏），以及提示词中的 YG / Little Code Sauce 人格段。",
+        "> 安装后执行 `/purge apply` 或 `dsh-purge --apply`；差异详见 `LITE-NOTES.md`。",
+        "",
+      ]
+    : [
+        "> **lite build**: generated by `lite/make-lite.mjs` from dsh-purge v1.1.71.",
+        "> Removed: `skills/redteam/` (23 bundled skills), `presets/redteam/` (red-team preset and roles), `lib/redteam/` (drill console),",
+        "> `lib/skills.js` (skill import), `client.js` (dock), and the YG / Little Code Sauce persona block in the prompt.",
+        "> After install run `/purge apply` or `dsh-purge --apply`. See `LITE-NOTES.md` for the full diff.",
+        "",
+      ];
+  lines = [...notice, ...lines];
+  return lines.join("\n").replace(/\n{4,}/g, "\n\n\n");
+}
+
 // 4) 提示词：裁掉人格段，保留破甲行为规则
 const promptSrc = [
   path.join(process.env.HOME || "", ".dsh/prompt-inject.md"),
@@ -272,9 +420,10 @@ if (prompt) {
   for (const doc of ["README.md", "README.zh-CN.md"]) {
     const dp = path.join(out, doc);
     if (!fs.existsSync(dp)) continue;
-    const text = fs.readFileSync(dp, "utf8")
+    let text = fs.readFileSync(dp, "utf8")
       .replace(/默认提示词面向国模「小码酱」/g, "默认提示词为通用版（lite 已移除角色）")
       .replace(/Default prompt for 小码酱/g, "Default prompt is generic (lite: role removed)");
+    text = cleanDocs(text, doc === "README.zh-CN.md");
     fs.writeFileSync(dp, text);
   }
   report.push(`提示词：裁掉 ${dropped.length} 处人格段（${dropped.join(", ")}），保留 ${prompt.length} 字符`);
